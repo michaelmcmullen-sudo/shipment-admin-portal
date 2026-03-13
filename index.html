@@ -5,7 +5,6 @@
   <title>Shipments Dashboard | Internal Admin</title>
   <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
   <style>
-    /* YOUR ORIGINAL STYLING - EXACTLY AS PROVIDED */
     body { font-family: 'Segoe UI', sans-serif; margin: 20px; background: #f0f2f5; color: #333; }
     .dashboard-header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 15px; }
     .kpi-container { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 420px; }
@@ -24,7 +23,7 @@
     .f-input { padding: 5px; border: 1px solid #ccc; border-radius: 3px; }
     .chk-col { width: 40px; text-align: center; }
     tr.selected-row { background-color: #fff9c4 !important; }
-    
+    tr.processed-row { border-left: 5px solid #1b9e77; background-color: #f0fff4; }
     #loader { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:1000; justify-content:center; align-items:center; font-weight:bold; color:#2c3e50; }
   </style>
 </head>
@@ -47,7 +46,7 @@
       <div><label style="font-size:10px; font-weight:bold; display:block">RECEIVED</label>
         <select id="bulkStatus" class="f-input"><option value="">No Change</option><option value="YES">YES</option><option value="NO">NO</option></select>
       </div>
-      <button class="btn btn-bulk" onclick="applyBulkUpdate()" id="bulkBtn">Bulk Update</button>
+      <button class="btn btn-bulk" onclick="applyBulkUpdate()" id="bulkBtn">Generate ASN</button>
     </div>
 
     <div>
@@ -60,7 +59,6 @@
   <div class="table-container" id="shipmentsContainer"></div>
 
   <script>
-    // URL TO YOUR GOOGLE WEB APP
     const API_URL = "https://script.google.com/macros/s/AKfycbxq005p99dZ7jzO_KBDnCTZRjcWP4f2DDfMIL-2ixtMfKCsPhkNnPg1yjbSFxcY4t3y0Q/exec";
     
     let rawData = []; 
@@ -73,17 +71,12 @@
     async function loadData() {
       document.getElementById('loader').style.display = 'flex';
       try {
-        const response = await fetch(API_URL, {
-          method: 'POST',
-          body: JSON.stringify({ action: "getAllShipments" })
-        });
+        const response = await fetch(API_URL, { method: 'POST', body: JSON.stringify({ action: "getAllShipments" }) });
         const data = await response.json();
         rawData = data;
         renderTable(data); 
         drawKPIChart(data);
-      } catch (e) {
-        alert("Error loading data: " + e);
-      }
+      } catch (e) { alert("Error loading data: " + e); }
       document.getElementById('loader').style.display = 'none';
     }
 
@@ -112,9 +105,8 @@
         const dataTable = google.visualization.arrayToDataTable(chartArray);
         const options = {
           title: '30-Day Delivery Forecast',
-          hAxis: { slantedText: true, slantedTextAngle: 60, textStyle: { fontSize: 14, bold: true, color: '#333' } },
-          seriesType: 'bars',
-          series: { 1: { type: 'line', pointSize: 8, color: '#e67e22' } },
+          hAxis: { slantedText: true, slantedTextAngle: 60 },
+          seriesType: 'bars', series: { 1: { type: 'line', pointSize: 8, color: '#e67e22' } },
           colors: ['#34495e'], chartArea: { width: '90%', height: '60%', bottom: 100 },
           legend: { position: 'top' }
         };
@@ -132,16 +124,12 @@
     function formatYYYYMMDD(d) { return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
 
     function renderTable(data) {
-      if (!data || data.length === 0) { document.getElementById('shipmentsContainer').innerHTML = "No data found."; return; }
       headers = columnOrder.filter(key => data[0].hasOwnProperty(key));
       let html = `<table id="shipTable"><thead><tr><th class="chk-col"><input type="checkbox" onclick="toggleAll(this)"></th>`;
-      
       headers.forEach(h => { 
         let defVal = (h === "received") ? "NO" : "";
-        html += `<th>${h.replace(/_/g, ' ').toUpperCase()}<br>
-                 <input type="text" class="f-input" style="width:85%" value="${defVal}" onkeyup="filter()"></th>`; 
+        html += `<th>${h.replace(/_/g, ' ').toUpperCase()}<br><input type="text" class="f-input" style="width:85%" value="${defVal}" onkeyup="filter()"></th>`; 
       });
-      
       html += `</tr></thead><tbody>`;
       data.forEach(row => {
         html += `<tr id="tr-${row.actual_row_id}"><td class="chk-col"><input type="checkbox" class="row-chk" value="${row.actual_row_id}" onchange="highlightRow(this)"></td>`;
@@ -152,16 +140,48 @@
       filter();
     }
 
-    function filterTableByDate(dateStr) {
-      resetTableFilter();
-      const idx = headers.indexOf("delivery_date") + 1;
-      let count = 0;
-      document.querySelectorAll("#shipTable tbody tr").forEach(tr => {
-        const match = tr.cells[idx].innerText.trim() === dateStr;
-        tr.style.display = match ? "" : "none";
-        if(match) count++;
+    async function applyBulkUpdate() {
+      const selectedCheckboxes = Array.from(document.querySelectorAll('.row-chk:checked'));
+      if(!selectedCheckboxes.length) return alert("Select rows first!");
+      
+      const newDate = document.getElementById('bulkDate').value;
+      if(!newDate) return alert("Please select a Delivery Date for the ASN.");
+
+      const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12);
+      const fileDate = newDate.replace(/-/g, '');
+      
+      // EDI Header
+      let edi = `ISA|00|          |00|          |ZZ|SENDERID       |ZZ|RECEIVERID     |${timestamp.slice(2,8)}|${timestamp.slice(8,12)}|^|00501|000000001|0|P|>\n`;
+      edi += `BSN|00|ASN${timestamp}|${fileDate}|${timestamp.slice(8,12)}\n`;
+      edi += `DTM|017|${fileDate}\n`;
+
+      selectedCheckboxes.forEach((chk, index) => {
+        const row = chk.closest('tr');
+        const cells = Array.from(row.cells);
+        const deliveryNote = cells[5].innerText.trim();
+        const material = cells[6].innerText.trim();
+        const qty = cells[7].innerText.trim();
+
+        edi += `HL|${index + 1}||I\n`; 
+        edi += `LIN|${index + 1}|BP|${material}\n`;
+        edi += `SN1||${qty}|EA\n`;
+        edi += `REF|BM|${deliveryNote}\n`;
+        
+        row.classList.add('processed-row');
+        chk.checked = false;
+        row.classList.remove('selected-row');
       });
-      document.getElementById('rowCount').innerText = `Date Filter: ${count} rows`;
+
+      edi += `CTT|${selectedCheckboxes.length}\n`;
+      edi += `SE|${(selectedCheckboxes.length * 4) + 3}|0001\n`; 
+      edi += `IEA|1|000000001\n`;
+
+      const blob = new Blob([edi], { type: 'text/plain' });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `ASN_856_${timestamp}.txt`;
+      link.click();
+      showMsg("ASN .txt file generated locally.");
     }
 
     function filter() {
@@ -171,9 +191,7 @@
       rows.forEach(tr => {
         let show = true;
         filters.forEach((inp, i) => { 
-          if (inp.value && !tr.cells[i+1].innerText.toLowerCase().includes(inp.value.toLowerCase())) {
-            show = false; 
-          }
+          if (inp.value && !tr.cells[i+1].innerText.toLowerCase().includes(inp.value.toLowerCase())) show = false; 
         });
         tr.style.display = show ? "" : "none";
         if(show) count++;
@@ -181,45 +199,11 @@
       document.getElementById('rowCount').innerText = `Showing ${count} rows`;
     }
 
-    function toggleAll(master) { 
-      document.querySelectorAll('.row-chk').forEach(chk => { 
-        if (chk.closest('tr').style.display !== 'none') { 
-          chk.checked = master.checked; highlightRow(chk); 
-        } 
-      }); 
-    }
-
+    function resetTableFilter() { document.querySelectorAll('thead input').forEach(i => i.value = ""); filter(); }
+    function toggleAll(master) { document.querySelectorAll('.row-chk').forEach(chk => { if (chk.closest('tr').style.display !== 'none') { chk.checked = master.checked; highlightRow(chk); } }); }
     function highlightRow(chk) { chk.closest('tr').classList.toggle('selected-row', chk.checked); }
-
-    async function applyBulkUpdate() {
-      const sel = Array.from(document.querySelectorAll('.row-chk:checked')).map(c => c.value);
-      if(!sel.length) return alert("Select rows!");
-      document.getElementById('loader').style.display = 'flex';
-      
-      const payload = {
-        action: "updateMultipleRows",
-        rowIds: sel,
-        note: document.getElementById('bulkNote').value,
-        date: document.getElementById('bulkDate').value,
-        status: document.getElementById('bulkStatus').value
-      };
-
-      try {
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-        const result = await res.json();
-        showMsg(result.result);
-        setTimeout(()=>loadData(), 1200); 
-      } catch (e) { alert("Error: " + e); }
-      document.getElementById('loader').style.display = 'none';
-    }
-
-    function resetTableFilter() { 
-      document.querySelectorAll('thead input').forEach(i => i.value = ""); 
-      filter(); 
-    }
-
     function showMsg(m) { const b = document.getElementById('msgBar'); b.innerText = m; b.style.display = 'block'; b.className = "status-success"; }
-    
+
     function downloadCSV() {
       let csv = [headers.join(",")];
       document.querySelectorAll("#shipTable tbody tr").forEach(tr => { 
@@ -231,9 +215,23 @@
       });
       const link = document.createElement("a"); 
       link.href = URL.createObjectURL(new Blob([csv.join("\n")], {type:'text/csv'})); 
-      link.download = "Report.csv"; 
-      link.click();
+      link.download = "Report.csv"; link.click();
     }
+    
+    function filterTableByDate(dateStr) {
+      resetTableFilter();
+      const idx = headers.indexOf("delivery_date") + 1;
+      let count = 0;
+      document.querySelectorAll("#shipTable tbody tr").forEach(tr => {
+        const match = tr.cells[idx].innerText.trim() === dateStr;
+        tr.style.display = match ? "" : "none";
+        if(match) count++;
+      });
+      document.getElementById('rowCount').innerText = `Date Filter: ${count} rows`;
+    }
+  </script>
+</body>
+</html>
   </script>
 </body>
 </html>
