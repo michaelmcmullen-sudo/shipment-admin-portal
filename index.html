@@ -10,7 +10,6 @@
     .dashboard-header { display: flex; justify-content: space-between; align-items: center; background: white; padding: 15px 25px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); flex-wrap: wrap; gap: 15px; }
     .kpi-container { background: white; padding: 20px; border-radius: 8px; margin-bottom: 20px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); min-height: 420px; }
     .btn { padding: 10px 18px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; color: white; transition: 0.2s; }
-    .btn-upload { background-color: #34495e; }
     .btn-download { background-color: #1b9e77; }
     .btn-bulk { background-color: #007bff; }
     .btn-reset { background-color: #e74c3c; margin-left: 10px; padding: 5px 12px; font-size: 12px; }
@@ -26,7 +25,6 @@
     .chk-col { width: 40px; text-align: center; }
     tr.selected-row { background-color: #fff9c4 !important; }
     
-    /* Loading Overlay */
     #loader { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.8); z-index:1000; justify-content:center; align-items:center; font-weight:bold; color:#2c3e50; }
   </style>
 </head>
@@ -52,9 +50,7 @@
       <button class="btn btn-bulk" onclick="applyBulkUpdate()" id="bulkBtn">Bulk Update</button>
     </div>
 
-    <div style="display:flex; gap:10px;">
-      <input type="file" id="fileInp" style="display:none" onchange="initiateUpload(this)">
-      <button class="btn btn-upload" onclick="document.getElementById('fileInp').click()">Import Master</button>
+    <div>
       <button class="btn btn-download" onclick="downloadCSV()">Export CSV</button>
     </div>
   </div>
@@ -74,7 +70,6 @@
     google.charts.load('current', {'packages':['corechart']});
     window.onload = () => { loadData(); };
 
-    // REPLACING google.script.run WITH fetch
     async function loadData() {
       document.getElementById('loader').style.display = 'flex';
       try {
@@ -92,7 +87,6 @@
       document.getElementById('loader').style.display = 'none';
     }
 
-    // KPI CHART LOGIC - EXACTLY AS PROVIDED
     function drawKPIChart(data) {
       google.charts.setOnLoadCallback(() => {
         const today = new Date(); today.setHours(0,0,0,0);
@@ -158,7 +152,6 @@
       filter();
     }
 
-    // CORE FUNCTIONS (EXACTLY AS PROVIDED)
     function filterTableByDate(dateStr) {
       resetTableFilter();
       const idx = headers.indexOf("delivery_date") + 1;
@@ -218,26 +211,6 @@
         setTimeout(()=>loadData(), 1200); 
       } catch (e) { alert("Error: " + e); }
       document.getElementById('loader').style.display = 'none';
-    }
-
-    function initiateUpload(input) {
-      const reader = new FileReader();
-      reader.onload = async e => {
-        document.getElementById('loader').style.display = 'flex';
-        const payload = {
-          action: "replaceSheetWithFileData",
-          base64Data: e.target.result,
-          fileName: input.files[0].name
-        };
-        try {
-          const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-          const result = await res.json();
-          showMsg(result.result);
-          loadData();
-        } catch (e) { alert("Error: " + e); }
-        document.getElementById('loader').style.display = 'none';
-      };
-      reader.readAsDataURL(input.files[0]);
     }
 
     function resetTableFilter() { 
