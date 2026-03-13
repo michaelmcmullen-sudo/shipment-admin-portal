@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Internal Shipments Admin</title>
+    <style>
+        body { font-family: sans-serif; margin: 20px; background: #f0f2f5; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+        th { background: #2c3e50; color: white; position: sticky; top: 0; }
+        tr:hover { background: #f1f1f1; }
+        .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
+        button { padding: 8px 16px; cursor: pointer; background: #1b9e77; color: white; border: none; border-radius: 4px; font-weight: bold; }
+        button:disabled { background: #ccc; }
+        input, select { padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
+        #loading { display: none; color: #1b9e77; font-weight: bold; }
+        .filter-input { width: 100%; box-sizing: border-box; margin-top: 5px; font-size: 10px; }
+    </style>
+</head>
+<body>
+
+    <h2>Internal Shipments Administration</h2>
+
+    <div class="card">
+        <h3>Bulk Actions (Selected Rows)</h3>
+        <div class="controls">
+            <input type="text" id="sapNote" placeholder="SAP Note">
+            <input type="date" id="delDate">
+            <select id="recStatus">
+                <option value="">-- Change Status --</option>
+                <option value="YES">Received (YES)</option>
+                <option value="NO">Not Received (NO)</option>
+            </select>
+            <button id="updateBtn" onclick="bulkUpdate()">Apply to Selected</button>
+            <span id="loading">Processing...</span>
+        </div>
+    </div>
+
+    <div class="card">
+        <h3>Master Data Upload (Sheet1 Overwrite)</h3>
+        <div class="controls">
+            <input type="file" id="excelFile" accept=".xlsx">
+            <button onclick="handleUpload()">Upload & Replace Sheet1</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <table id="adminTable">
+            <thead>
+                <tr id="headerRow">
+                    <th><input type="checkbox" onclick="toggleAll(this)"></th>
+                    <th>Vendor</th>
+                    <th>Part</th>
+                    <th>Qty</th>
+                    <th>Week</th>
+                    <th>Coll. Date</th>
+                    <th>Note</th>
+                    <th>Rec?</th>
+                    <th>SAP Note</th>
+                    <th>Del. Date</th>
+                </tr>
+                <tr id="filterRow">
+                    </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+
+<script>
+    // PASTE YOUR GOOGLE WEB APP URL HERE
+    const API_URL = "https://script.google.com/macros/s/.../exec"; 
+    let masterData = [];
+
+    async function fetchData() {
+        showLoading(true);
+        const res = await fetch(API_URL, {
+            method: 'POST',
+            body: JSON.stringify({ action: "getAllShipments" })
+        });
+        masterData = await res.json();
+        renderTable(masterData);
+        showLoading(false);
+    }
+
+    function renderTable(data) {
+        const body = document.getElementById('tableBody');
+        body.innerHTML = "";
+        data.forEach(row => {
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td><input type="checkbox" class="row-check" value="${row.actual_row_id}"></td>
+                <td>${row.vendor_name}<br><small>${row.vendor_number}</small></td>
+                <td>${row.material_number}</td>
+                <td>${row.qty_parts}</td>
+                <td>${row.week}</td>
+                <td>${row.collection_date}</td>
+                <td>${row.delivery_note}</td>
+                <td>${row.received || ''}</td>
+                <td>${row.sap_note || ''}</td>
+                <td>${row.delivery_date || ''}</td>
+            `;
+            body.appendChild(tr);
+        });
+    }
+
+    async function bulkUpdate() {
+        const selected = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
+        if (selected.length === 0) return alert("Select rows first");
+
+        showLoading(true);
+        const payload = {
+            action: "updateMultipleRows",
+            rowIds: selected,
+            note: document.getElementById('sapNote').value,
+            date: document.getElementById('delDate').value,
+            status: document.getElementById('recStatus').value
+        };
+
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+        const result = await res.json();
+        alert(result.result);
+        fetchData();
+    }
+
+    function handleUpload() {
+        const file = document.getElementById('excelFile').files[0];
+        if (!file) return alert("Select a file");
+
+        const reader = new FileReader();
+        reader.onload = async function(e) {
+            showLoading(true);
+            const payload = {
+                action: "replaceSheetWithFileData",
+                base64Data: e.target.result,
+                fileName: file.name
+            };
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            const result = await res.json();
+            alert(result.result);
+            showLoading(false);
+        };
+        reader.readAsDataURL(file);
+    }
+
+    function toggleAll(source) {
+        document.querySelectorAll('.row-check').forEach(cb => cb.checked = source.checked);
+    }
+
+    function showLoading(show) {
+        document.getElementById('loading').style.display = show ? 'inline' : 'none';
+        document.getElementById('updateBtn').disabled = show;
+    }
+
+    window.onload = fetchData;
+</script>
+</body>
+</html>
