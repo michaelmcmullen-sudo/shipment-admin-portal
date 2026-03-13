@@ -1,113 +1,211 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Internal Shipments Admin</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Internal Admin | Shipments Dashboard</title>
     <style>
-        body { font-family: sans-serif; margin: 20px; background: #f0f2f5; }
-        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 10px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-        th { background: #2c3e50; color: white; position: sticky; top: 0; }
-        tr:hover { background: #f1f1f1; }
-        .controls { display: flex; gap: 10px; align-items: center; margin-bottom: 15px; flex-wrap: wrap; }
-        button { padding: 8px 16px; cursor: pointer; background: #1b9e77; color: white; border: none; border-radius: 4px; font-weight: bold; }
-        button:disabled { background: #ccc; }
-        input, select { padding: 6px; border: 1px solid #ccc; border-radius: 4px; }
-        #loading { display: none; color: #1b9e77; font-weight: bold; }
-        .filter-input { width: 100%; box-sizing: border-box; margin-top: 5px; font-size: 10px; }
+        body{font-family:Arial,sans-serif;margin:20px;background:#f5f5f5;color:#333;}
+        h2{color:#1b9e77;}
+        table{border-collapse:collapse;width:100%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,0.1);}
+        th,td{padding:8px;text-align:center;border:1px solid #ddd; font-size:11px;}
+        th{background:#1b9e77;color:#fff;position:sticky;top:0;z-index:10; cursor: default; white-space: nowrap;}
+        tr:nth-child(even){background:#f9f9f9;}
+        tr:hover{background:#e0f7e9;}
+        
+        /* Layout Cards */
+        .admin-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin-bottom: 20px; border-top: 4px solid #1b9e77; }
+        .admin-card h3 { margin-top: 0; color: #333; font-size: 14px; text-transform: uppercase; }
+
+        /* Controls */
+        input[type="text"], input[type="date"], select {padding:6px;margin:2px;border:1px solid #ddd;border-radius:4px;font-size:11px;}
+        button{background:#1b9e77;color:#fff;border:none;padding:8px 15px;margin:5px;cursor:pointer;border-radius:5px;font-weight:bold;}
+        button:hover{background:#149361;}
+        .btn-upload { background: #2c3e50; }
+        .btn-upload:hover { background: #1a252f; }
+        
+        /* Filter Styles (Exactly like Supplier Portal) */
+        .filter-btn { cursor: pointer; margin-left: 5px; font-size: 10px; border: 1px solid rgba(255,255,255,0.5); padding: 1px 4px; border-radius: 3px; display: inline-block;}
+        .filter-menu { display: none; position: fixed; background: white; border: 1px solid #ccc; box-shadow: 0px 4px 12px rgba(0,0,0,0.3); z-index: 1000; padding: 10px; color: #333; text-align: left; min-width: 180px; max-height: 350px; overflow-y: auto; border-radius: 4px;}
+        .filter-menu.active { display: block; }
+        .filter-item { display: block; padding: 4px 0; font-size: 11px; cursor: pointer; }
+        .filter-item input { width: auto !important; margin-right: 8px; vertical-align: middle;}
+        .filter-search { width: 100%; margin-bottom: 8px; padding: 5px; font-size: 11px; border: 1px solid #ddd; border-radius: 3px; box-sizing: border-box;}
+        .filter-list { max-height: 200px; overflow-y: auto; margin-bottom: 8px; border-bottom: 1px solid #eee;}
+        .filter-actions { display: flex; justify-content: space-between; padding-top: 5px;}
+        .filter-actions span { cursor: pointer; color: #1b9e77; font-weight: bold; font-size: 10px; }
+
+        /* Loading Modal */
+        #loadingModal{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.6);z-index:9999;align-items:center;justify-content:center;flex-direction:column;color:white;}
+        #spinner{border:6px solid #f3f3f3;border-top:6px solid #1b9e77;border-radius:50%;width:40px;height:40px;animation:spin 1s linear infinite;margin-bottom:10px;}
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 
-    <h2>Internal Shipments Administration</h2>
-
-    <div class="card">
-        <h3>Bulk Actions (Selected Rows)</h3>
-        <div class="controls">
-            <input type="text" id="sapNote" placeholder="SAP Note">
-            <input type="date" id="delDate">
-            <select id="recStatus">
-                <option value="">-- Change Status --</option>
-                <option value="YES">Received (YES)</option>
-                <option value="NO">Not Received (NO)</option>
-            </select>
-            <button id="updateBtn" onclick="bulkUpdate()">Apply to Selected</button>
-            <span id="loading">Processing...</span>
-        </div>
+<div id="loadingModal">
+    <div style="background:#fff;padding:30px;border-radius:8px;color:#333;text-align:center;">
+        <div id="spinner"></div>
+        <div id="loadingText">Syncing Data...</div>
     </div>
+</div>
 
-    <div class="card">
-        <h3>Master Data Upload (Sheet1 Overwrite)</h3>
-        <div class="controls">
-            <input type="file" id="excelFile" accept=".xlsx">
-            <button onclick="handleUpload()">Upload & Replace Sheet1</button>
-        </div>
-    </div>
+<h2>Internal Admin Portal</h2>
 
-    <div class="card">
-        <table id="adminTable">
-            <thead>
-                <tr id="headerRow">
-                    <th><input type="checkbox" onclick="toggleAll(this)"></th>
-                    <th>Vendor</th>
-                    <th>Part</th>
-                    <th>Qty</th>
-                    <th>Week</th>
-                    <th>Coll. Date</th>
-                    <th>Note</th>
-                    <th>Rec?</th>
-                    <th>SAP Note</th>
-                    <th>Del. Date</th>
+<div class="admin-card">
+    <h3>Bulk Update Selected Rows</h3>
+    <input type="text" id="sapNote" placeholder="SAP Note">
+    <input type="date" id="delDate">
+    <select id="recStatus">
+        <option value="">-- Received? --</option>
+        <option value="YES">YES</option>
+        <option value="NO">NO</option>
+    </select>
+    <button onclick="bulkUpdate()">Update Selected</button>
+</div>
+
+<div class="admin-card">
+    <h3>Master Data Upload (Overwrite Sheet1)</h3>
+    <input type="file" id="excelFile" accept=".xlsx">
+    <button class="btn-upload" onclick="handleUpload()">Upload & Replace Data</button>
+</div>
+
+<div id="portalData">
+    <table id="mainTable">
+        <thead>
+            <tr id="headerRow">
+                <th><input type="checkbox" onclick="toggleAll(this)"></th>
                 </tr>
-                <tr id="filterRow">
-                    </tr>
-            </thead>
-            <tbody id="tableBody"></tbody>
-        </table>
-    </div>
+        </thead>
+        <tbody id="tableBody"></tbody>
+    </table>
+</div>
 
 <script>
     // PASTE YOUR GOOGLE WEB APP URL HERE
     const API_URL = "https://script.google.com/macros/s/AKfycbxq005p99dZ7jzO_KBDnCTZRjcWP4f2DDfMIL-2ixtMfKCsPhkNnPg1yjbSFxcY4t3y0Q/exec"; 
+    
     let masterData = [];
+    let activeFilters = {};
+
+    window.onload = fetchData;
 
     async function fetchData() {
-        showLoading(true);
-        const res = await fetch(API_URL, {
-            method: 'POST',
-            body: JSON.stringify({ action: "getAllShipments" })
-        });
-        masterData = await res.json();
-        renderTable(masterData);
-        showLoading(false);
+        toggleLoading(true, "Fetching Shipments...");
+        try {
+            const res = await fetch(API_URL, {
+                method: 'POST',
+                body: JSON.stringify({ action: "getAllShipments" })
+            });
+            masterData = await res.json();
+            renderTable();
+        } catch (e) { alert("Error connecting to Google."); }
+        toggleLoading(false);
     }
 
-    function renderTable(data) {
+    function renderTable() {
+        const headerRow = document.getElementById('headerRow');
         const body = document.getElementById('tableBody');
+        
+        // Define Admin Columns (matching your getAllShipments keys)
+        const cols = [
+            {id: "vendor_name", label: "Vendor"},
+            {id: "material_number", label: "Part"},
+            {id: "qty_parts", label: "Qty"},
+            {id: "week", label: "Week"},
+            {id: "collection_date", label: "Coll. Date"},
+            {id: "delivery_note", label: "Supplier Note"},
+            {id: "received", label: "Rec?"},
+            {id: "sap_note", label: "SAP Note"},
+            {id: "delivery_date", label: "Del. Date"}
+        ];
+
+        // Generate Headers once
+        if (headerRow.cells.length <= 1) {
+            cols.forEach((col, i) => {
+                let th = document.createElement('th');
+                th.innerHTML = `${col.label} <span class="filter-btn" onclick="toggleFilterMenu(this, ${i+1}, '${col.id}')">▼</span><div id="filter-${i+1}" class="filter-menu"></div>`;
+                headerRow.appendChild(th);
+            });
+        }
+
         body.innerHTML = "";
-        data.forEach(row => {
+        masterData.forEach(row => {
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td><input type="checkbox" class="row-check" value="${row.actual_row_id}"></td>
-                <td>${row.vendor_name}<br><small>${row.vendor_number}</small></td>
-                <td>${row.material_number}</td>
-                <td>${row.qty_parts}</td>
-                <td>${row.week}</td>
-                <td>${row.collection_date}</td>
-                <td>${row.delivery_note}</td>
-                <td>${row.received || ''}</td>
-                <td>${row.sap_note || ''}</td>
-                <td>${row.delivery_date || ''}</td>
-            `;
+            tr.className = "data-row";
+            tr.innerHTML = `<td><input type="checkbox" class="row-check" value="${row.actual_row_id}"></td>`;
+            cols.forEach(col => {
+                tr.innerHTML += `<td>${row[col.id] || ''}</td>`;
+            });
             body.appendChild(tr);
         });
     }
 
+    // --- FILTER LOGIC (EXACTLY LIKE ORIGINAL) ---
+
+    function toggleFilterMenu(btn, colIndex, dataKey) {
+        window.event.stopPropagation();
+        const menu = document.getElementById(`filter-${colIndex}`);
+        const isActive = menu.classList.contains('active');
+        document.querySelectorAll('.filter-menu').forEach(m => m.classList.remove('active'));
+        
+        if (!isActive) {
+            const rect = btn.getBoundingClientRect();
+            menu.style.top = (rect.bottom + window.scrollY + 5) + "px";
+            menu.style.left = (rect.left + window.scrollX) + "px";
+            menu.classList.add('active');
+            
+            if (menu.innerHTML === "") {
+                const values = Array.from(new Set(masterData.map(item => String(item[dataKey] || '').trim()))).sort();
+                let html = `<input type="text" class="filter-search" placeholder="Search..." onkeyup="searchFilter(this)" onclick="event.stopPropagation()">`;
+                html += `<div class="filter-list" onclick="event.stopPropagation()">`;
+                values.forEach(v => {
+                    html += `<label class="filter-item"><input type="checkbox" checked value="${v}" onchange="updateFilters(${colIndex})"> ${v}</label>`;
+                });
+                html += `</div><div class="filter-actions" onclick="event.stopPropagation()"><span onclick="setAll(${colIndex}, true)">All</span><span onclick="setAll(${colIndex}, false)">Clear</span></div>`;
+                menu.innerHTML = html;
+            }
+        }
+    }
+
+    function updateFilters(colIndex) {
+        const menu = document.getElementById(`filter-${colIndex}`);
+        const selected = Array.from(menu.querySelectorAll('input[type="checkbox"]:checked')).map(i => i.value);
+        activeFilters[colIndex] = selected;
+        applyAllFilters();
+    }
+
+    function applyAllFilters() {
+        const rows = document.querySelectorAll("#tableBody tr.data-row");
+        rows.forEach(row => {
+            let show = true;
+            for (let colIndex in activeFilters) {
+                let cellVal = row.cells[colIndex].innerText.trim();
+                if (!activeFilters[colIndex].includes(cellVal)) { show = false; break; }
+            }
+            row.style.display = show ? "" : "none";
+        });
+    }
+
+    function searchFilter(input) {
+        const term = input.value.toUpperCase();
+        const labels = input.parentElement.querySelectorAll('.filter-item');
+        labels.forEach(l => l.style.display = l.innerText.toUpperCase().includes(term) ? "" : "none");
+    }
+
+    function setAll(colIndex, val) {
+        const menu = document.getElementById(`filter-${colIndex}`);
+        menu.querySelectorAll('input[type="checkbox"]').forEach(i => i.checked = val);
+        updateFilters(colIndex);
+    }
+
+    // --- ADMIN ACTIONS ---
+
     async function bulkUpdate() {
         const selected = Array.from(document.querySelectorAll('.row-check:checked')).map(cb => cb.value);
-        if (selected.length === 0) return alert("Select rows first");
+        if (selected.length === 0) return alert("Please select at least one row.");
 
-        showLoading(true);
+        toggleLoading(true, "Updating Records...");
         const payload = {
             action: "updateMultipleRows",
             rowIds: selected,
@@ -116,28 +214,33 @@
             status: document.getElementById('recStatus').value
         };
 
-        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-        const result = await res.json();
-        alert(result.result);
-        fetchData();
+        try {
+            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+            const result = await res.json();
+            alert(result.result);
+            fetchData();
+        } catch(e) { alert("Update failed."); }
+        toggleLoading(false);
     }
 
     function handleUpload() {
         const file = document.getElementById('excelFile').files[0];
-        if (!file) return alert("Select a file");
+        if (!file) return alert("Please select a file.");
 
         const reader = new FileReader();
         reader.onload = async function(e) {
-            showLoading(true);
+            toggleLoading(true, "Importing Excel Data...");
             const payload = {
                 action: "replaceSheetWithFileData",
                 base64Data: e.target.result,
                 fileName: file.name
             };
-            const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
-            const result = await res.json();
-            alert(result.result);
-            showLoading(false);
+            try {
+                const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
+                const result = await res.json();
+                alert(result.result);
+            } catch(e) { alert("Upload failed."); }
+            toggleLoading(false);
         };
         reader.readAsDataURL(file);
     }
@@ -146,12 +249,14 @@
         document.querySelectorAll('.row-check').forEach(cb => cb.checked = source.checked);
     }
 
-    function showLoading(show) {
-        document.getElementById('loading').style.display = show ? 'inline' : 'none';
-        document.getElementById('updateBtn').disabled = show;
+    function toggleLoading(show, text) {
+        document.getElementById('loadingText').innerText = text;
+        document.getElementById('loadingModal').style.display = show ? 'flex' : 'none';
     }
 
-    window.onload = fetchData;
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.filter-menu').forEach(m => m.classList.remove('active'));
+    });
 </script>
 </body>
 </html>
