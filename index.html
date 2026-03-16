@@ -45,8 +45,8 @@
       <div><label style="font-size:10px; font-weight:bold; display:block">RECEIVED</label>
         <select id="bulkStatus" class="f-input"><option value="">No Change</option><option value="YES">YES</option><option value="NO">NO</option></select>
       </div>
-      
-      </div>
+      <button class="btn btn-bulk" onclick="applyBulkUpdate()" id="bulkBtn">Bulk Update</button>
+    </div>
 
     <div><button class="btn btn-download" onclick="downloadCSV()">Export CSV</button></div>
   </div>
@@ -56,7 +56,6 @@
   <div class="table-container" id="shipmentsContainer"></div>
 
   <script>
-    // REPLACE WITH YOUR LATEST DEPLOYMENT URL
     const API_URL = "https://script.google.com/macros/s/AKfycbxq005p99dZ7jzO_KBDnCTZRjcWP4f2DDfMIL-2ixtMfKCsPhkNnPg1yjbSFxcY4t3y0Q/exec";
     
     let rawData = []; 
@@ -72,7 +71,7 @@
         rawData = await response.json();
         renderTable(rawData); 
         drawKPIChart(rawData);
-      } catch (e) { console.error("Fetch Error:", e); alert("Failed to fetch data. Check API_URL and Permissions."); }
+      } catch (e) { console.error(e); alert("Fetch Error: Check console."); }
       document.getElementById('loader').style.display = 'none';
     }
 
@@ -94,43 +93,23 @@
       filter();
     }
 
-    // THIS FUNCTION IS READY BUT BUTTON IS COMMENTED OUT IN HTML
     async function applyBulkUpdate() {
       const selectedCheckboxes = Array.from(document.querySelectorAll('.row-chk:checked'));
       if(!selectedCheckboxes.length) return alert("Select rows first!");
-      const newDate = document.getElementById('bulkDate').value;
-      if(!newDate) return alert("Delivery Date required for ASN.");
 
       document.getElementById('loader').style.display = 'flex';
       try {
-        const res = await fetch(API_URL, { 
-          method: 'POST', 
-          body: JSON.stringify({ 
-            action: "updateMultipleRows", 
-            rowIds: selectedCheckboxes.map(c=>c.value), 
-            note: document.getElementById('bulkNote').value, 
-            date: newDate, 
-            status: document.getElementById('bulkStatus').value 
-          }) 
-        });
+        const payload = {
+          action: "updateMultipleRows",
+          rowIds: selectedCheckboxes.map(c => c.value),
+          note: document.getElementById('bulkNote').value,
+          date: document.getElementById('bulkDate').value,
+          status: document.getElementById('bulkStatus').value
+        };
+
+        const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const result = await res.json();
         
-        // Generate EDI .txt locally
-        const timestamp = new Date().toISOString().replace(/[-:T]/g, '').slice(0, 12);
-        const fileDate = newDate.replace(/-/g, '');
-        let edi = `ISA|00|          |00|          |ZZ|SENDERID       |ZZ|RECEIVERID     |${timestamp.slice(2,8)}|${timestamp.slice(8,12)}|^|00501|000000001|0|P|>\n`;
-        edi += `BSN|00|ASN${timestamp}|${fileDate}|${timestamp.slice(8,12)}\nDTM|017|${fileDate}\n`;
-        selectedCheckboxes.forEach((chk, index) => {
-          const cells = Array.from(chk.closest('tr').cells);
-          edi += `HL|${index + 1}||I\nLIN|${index + 1}|BP|${cells[6].innerText.trim()}\nSN1||${cells[7].innerText.trim()}|EA\nREF|BM|${cells[5].innerText.trim()}\n`;
-        });
-        edi += `CTT|${selectedCheckboxes.length}\nSE|${(selectedCheckboxes.length * 4) + 3}|0001\nIEA|1|000000001\n`;
-
-        const link = document.createElement("a");
-        link.href = URL.createObjectURL(new Blob([edi], { type: 'text/plain' }));
-        link.download = `ASN_856_${timestamp}.txt`;
-        link.click();
-
         showMsg(result.result);
         setTimeout(() => loadData(), 1200); 
       } catch (e) { alert("Error: " + e); }
@@ -174,7 +153,7 @@
         for (let i = 0; i <= 30; i++) {
           let d = new Date(today); d.setDate(today.getDate() + i);
           const label = String(d.getDate()).padStart(2, '0') + '-' + String(d.getMonth() + 1).padStart(2, '0');
-          dailyStats.set(label, { suppliers: new Set(), materials: new Set(), fullDate: d.toISOString().split('T')[0] });
+          dailyStats.set(label, { suppliers: new Set(), materials: new Set() });
         }
         data.forEach(row => {
           if ((row.received || "").toString().toUpperCase() === "NO" && row.delivery_date) {
@@ -188,7 +167,7 @@
         });
         const chartArray = [['Date', 'Suppliers', 'Parts']];
         dailyStats.forEach((val, key) => chartArray.push([key, val.suppliers.size, val.materials.size]));
-        const options = { title: '30-Day Delivery Forecast', seriesType: 'bars', series: { 1: { type: 'line', pointSize: 5 } }, colors: ['#34495e', '#e67e22'], chartArea: { width: '90%', height: '70%' } };
+        const options = { title: '30-Day Forecast', seriesType: 'bars', colors: ['#34495e', '#e67e22'], chartArea: { width: '90%', height: '70%' } };
         const chart = new google.visualization.ComboChart(document.getElementById('kpiChart'));
         chart.draw(google.visualization.arrayToDataTable(chartArray), options);
       });
