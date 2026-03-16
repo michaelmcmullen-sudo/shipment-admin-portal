@@ -56,6 +56,7 @@
   <div class="table-container" id="shipmentsContainer"></div>
 
   <script>
+    // CRITICAL: Ensure this matches your latest Google Script Deployment URL
     const API_URL = "https://script.google.com/macros/s/AKfycbxq005p99dZ7jzO_KBDnCTZRjcWP4f2DDfMIL-2ixtMfKCsPhkNnPg1yjbSFxcY4t3y0Q/exec";
     
     let rawData = []; 
@@ -71,7 +72,7 @@
         rawData = await response.json();
         renderTable(rawData); 
         drawKPIChart(rawData);
-      } catch (e) { console.error(e); alert("Fetch Error: Check console."); }
+      } catch (e) { console.error(e); alert("Connection Error: Check API URL and Deployment Permissions."); }
       document.getElementById('loader').style.display = 'none';
     }
 
@@ -110,12 +111,13 @@
         const res = await fetch(API_URL, { method: 'POST', body: JSON.stringify(payload) });
         const result = await res.json();
         
-        showMsg(result.result);
+        showMsg(result.result || "Update successful.");
         setTimeout(() => loadData(), 1200); 
-      } catch (e) { alert("Error: " + e); }
+      } catch (e) { alert("Update Error: " + e); }
       document.getElementById('loader').style.display = 'none';
     }
 
+    // --- HELPER FUNCTIONS ---
     function filter() {
       const rows = document.querySelectorAll("#shipTable tbody tr");
       const filters = document.querySelectorAll("thead input[type='text']");
@@ -128,11 +130,10 @@
       });
       document.getElementById('rowCount').innerText = `Showing ${count} rows`;
     }
-
     function highlightRow(chk) { chk.closest('tr').classList.toggle('selected-row', chk.checked); }
     function toggleAll(master) { document.querySelectorAll('.row-chk').forEach(chk => { if (chk.closest('tr').style.display !== 'none') { chk.checked = master.checked; highlightRow(chk); } }); }
     function resetTableFilter() { document.querySelectorAll('thead input').forEach(i => i.value = ""); filter(); }
-    function showMsg(m) { const b = document.getElementById('msgBar'); b.innerText = m; b.style.display = 'block'; b.className = "status-success"; }
+    function showMsg(m) { const b = document.getElementById('msgBar'); b.innerText = m; b.style.display = 'block'; b.className = "status-success"; setTimeout(() => b.style.display='none', 4000); }
     
     function downloadCSV() {
       let csv = [columnOrder.join(",")];
@@ -143,7 +144,7 @@
       });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(new Blob([csv.join("\n")], {type:'text/csv'}));
-      link.download = "Report.csv"; link.click();
+      link.download = "Dashboard_Export.csv"; link.click();
     }
 
     function drawKPIChart(data) {
@@ -165,9 +166,9 @@
             }
           }
         });
-        const chartArray = [['Date', 'Suppliers', 'Parts']];
+        const chartArray = [['Date', 'Unique Suppliers', 'Unique Parts']];
         dailyStats.forEach((val, key) => chartArray.push([key, val.suppliers.size, val.materials.size]));
-        const options = { title: '30-Day Forecast', seriesType: 'bars', colors: ['#34495e', '#e67e22'], chartArea: { width: '90%', height: '70%' } };
+        const options = { title: '30-Day Forecast', seriesType: 'bars', series: { 1: { type: 'line', pointSize: 5 } }, colors: ['#34495e', '#e67e22'], chartArea: { width: '90%', height: '70%' }, legend: { position: 'top' } };
         const chart = new google.visualization.ComboChart(document.getElementById('kpiChart'));
         chart.draw(google.visualization.arrayToDataTable(chartArray), options);
       });
